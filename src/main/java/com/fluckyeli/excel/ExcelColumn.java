@@ -1,0 +1,12 @@
+package com.fluckyeli.excel;
+
+import java.lang.annotation.*;
+
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface ExcelColumn {
+    /**
+     * Excel中的表头名称
+     */
+    String value();
+}
