@@ -1,6 +1,7 @@
 package com.fluckyeli.excel;
 
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -158,4 +159,122 @@ public class ExcelUtils {
 
         return null;
     }
+
+    /**
+     * 将数据列表导出为 Workbook 对象
+     *
+     * @param dataList  要导出的数据列表
+     * @param clazz     数据列表元素的 Class 类型
+     * @param sheetName Sheet 页名称
+     * @param <T>       泛型
+     * @return 包含数据的 Workbook 对象
+     */
+    public static <T> Workbook toExcel(List<T> dataList, Class<T> clazz, String sheetName) {
+        // 使用 XSSFWorkbook 支持 .xlsx 格式（更常用，最多支持 1048576 行）
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet(sheetName);
+
+        // 1. 获取需要导出的字段和表头名称
+        List<Field> annotatedFields = new ArrayList<>();
+        List<String> headerNames = new ArrayList<>();
+
+        Field[] fields = clazz.getDeclaredFields();
+        for (Field field : fields) {
+            if (field.isAnnotationPresent(ExcelColumn.class)) {
+                field.setAccessible(true); // 允许访问私有字段
+                annotatedFields.add(field);
+                ExcelColumn annotation = field.getAnnotation(ExcelColumn.class);
+                headerNames.add(annotation.value());
+            }
+        }
+
+        if (annotatedFields.isEmpty()) {
+            throw new IllegalArgumentException("映射类 " + clazz.getName() + " 中没有找到带有 @ExcelColumn 注解的字段。");
+        }
+
+        // 2. 创建表头 (第 0 行)
+        Row headerRow = sheet.createRow(0);
+        CellStyle headerStyle = createHeaderStyle(workbook); // 创建样式
+
+        for (int i = 0; i < headerNames.size(); i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headerNames.get(i));
+            cell.setCellStyle(headerStyle);
+        }
+
+        // 3. 写入数据行
+        CellStyle dateStyle = createDateStyle(workbook); // 创建日期样式
+        int rowIndex = 1;
+
+        for (T data : dataList) {
+            Row dataRow = sheet.createRow(rowIndex++);
+
+            for (int colIndex = 0; colIndex < annotatedFields.size(); colIndex++) {
+                Field field = annotatedFields.get(colIndex);
+                Cell cell = dataRow.createCell(colIndex);
+
+                try {
+                    Object value = field.get(data);
+                    setCellValue(cell, value, dateStyle); // 设置单元格值
+                } catch (IllegalAccessException e) {
+                    // 通常不会发生，因为我们设置了 field.setAccessible(true)
+                    cell.setCellValue("Error");
+                    System.err.println("字段访问错误: " + e.getMessage());
+                }
+            }
+        }
+
+        // 4. 优化列宽 (可选)
+        for (int i = 0; i < headerNames.size(); i++) {
+            sheet.autoSizeColumn(i);
+        }
+
+        return workbook;
+    }
+
+    /**
+     * 根据值类型设置单元格的值
+     */
+    private static void setCellValue(Cell cell, Object value, CellStyle dateStyle) {
+        if (value == null) {
+            cell.setCellValue("");
+        } else if (value instanceof Number) {
+            cell.setCellValue(((Number) value).doubleValue());
+        } else if (value instanceof Date) {
+            cell.setCellValue((Date) value);
+            cell.setCellStyle(dateStyle); // 应用日期样式
+        } else if (value instanceof Boolean) {
+            cell.setCellValue((Boolean) value);
+        } else if (value instanceof Enum) {
+            // 枚举通常导出其名称 (toString() 或 name())
+            cell.setCellValue(((Enum<?>) value).name());
+        } else {
+            cell.setCellValue(value.toString());
+        }
+    }
+
+    // --- 辅助样式创建方法 ---
+    /**
+     * 创建表头样式
+     */
+    private static CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        return style;
+    }
+
+    /**
+     * 创建日期样式
+     */
+    private static CellStyle createDateStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        // 设置日期格式为 YYYY-MM-DD
+        CreationHelper createHelper = workbook.getCreationHelper();
+        style.setDataFormat(createHelper.createDataFormat().getFormat("yyyy-mm-dd hh:mm:ss"));
+        return style;
+    }
+
 }
