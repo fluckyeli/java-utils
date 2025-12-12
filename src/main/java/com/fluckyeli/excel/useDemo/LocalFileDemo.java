@@ -1,8 +1,6 @@
 package com.fluckyeli.excel.useDemo;
 
 import com.fluckyeli.excel.ExcelUtils;
-import com.sun.org.slf4j.internal.Logger;
-import com.sun.org.slf4j.internal.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -10,7 +8,6 @@ import java.io.FileNotFoundException;
 import java.util.List;
 
 public class LocalFileDemo {
-    private static final Logger logger = LoggerFactory.getLogger(LocalFileDemo.class);
 
     public static void main(String[] args) {
         String filePath = "assets/products.xlsx"; // 假设文件在项目根目录下
@@ -42,7 +39,7 @@ public class LocalFileDemo {
         } catch (FileNotFoundException e) {
             System.err.println("文件未找到");
         } catch (Exception e) {
-            logger.error(String.format("解析 %s 时出现异常",filePath), e);
+            System.err.println(String.format("解析 %s 时出现异常,异常信息：", filePath) + e);
         }
     }
 }

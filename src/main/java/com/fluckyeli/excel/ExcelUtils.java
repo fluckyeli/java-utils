@@ -89,7 +89,7 @@ public class ExcelUtils {
         } catch (Exception e) {
             throw new RuntimeException("Excel 解析失败", e);
         }
-        
+
         return resultList;
     }
 
@@ -99,17 +99,41 @@ public class ExcelUtils {
     private static Object convertCellValue(Cell cell, Class<?> fieldType) {
         DataFormatter formatter = new DataFormatter(); // POI 提供的格式化工具
 
+        // 如果单元格为空，直接返回 null
+        if (cell == null || cell.getCellType() == CellType.BLANK) {
+            return null;
+        }
+
+        // 0. Enum 枚举类型处理
+        if (fieldType.isEnum()) {
+            String cellString = formatter.formatCellValue(cell).trim().toUpperCase(); // 转换为大写，提高匹配容错性
+
+            if (cellString.isEmpty()) {
+                return null;
+            }
+
+            try {
+                // 使用 Enum.valueOf() 进行反射转换。
+                // ⚠️ 注意：这要求 Excel 中的字符串必须精确匹配（这里是匹配大写后）枚举常量的名称。
+                return Enum.valueOf((Class<Enum>) fieldType, cellString);
+            } catch (IllegalArgumentException e) {
+                // 如果 Excel 单元格中的值在枚举中找不到，则忽略或抛出错误
+                System.err.printf("警告: Excel值 '%s' 在枚举 %s 中找不到对应的常量，将返回 null.%n", cellString, fieldType.getName());
+                return null;
+            }
+        }
+
         // 1. String
         if (fieldType == String.class) {
             return formatter.formatCellValue(cell);
         }
-        
+
         // 2. Integer
         if (fieldType == Integer.class || fieldType == int.class) {
             String val = formatter.formatCellValue(cell);
             return (val == null || val.isEmpty()) ? null : Integer.parseInt(val);
         }
-        
+
         // 3. Double
         if (fieldType == Double.class || fieldType == double.class) {
             if (cell.getCellType() == CellType.NUMERIC) {
@@ -118,13 +142,13 @@ public class ExcelUtils {
             String val = formatter.formatCellValue(cell);
             return (val == null || val.isEmpty()) ? null : Double.parseDouble(val);
         }
-        
+
         // 4. BigDecimal
         if (fieldType == BigDecimal.class) {
             String val = formatter.formatCellValue(cell);
             return (val == null || val.isEmpty()) ? null : new BigDecimal(val);
         }
-        
+
         // 5. Date
         if (fieldType == Date.class) {
             if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
