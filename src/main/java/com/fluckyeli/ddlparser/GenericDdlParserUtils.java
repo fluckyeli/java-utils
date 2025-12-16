@@ -10,6 +10,7 @@ import com.alibaba.druid.sql.ast.statement.SQLTableElement;
 import com.alibaba.druid.util.StringUtils;
 
 import java.sql.SQLSyntaxErrorException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -74,6 +75,52 @@ public class GenericDdlParserUtils {
             System.err.println("解析失败 [" + dbType + "]: " + e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * 多段 DDL 解析方法
+     * * @param sql    包含多段 DDL 的字符串 (例如: CREATE TABLE A...; CREATE TABLE B...;)
+     * @param dbType 数据库类型
+     * @return 包含多个表元数据的列表
+     */
+    public static List<TableMeta> parseMultiCreateTable(String sql, DbType dbType) {
+        List<TableMeta> results = new ArrayList<>();
+        if (StringUtils.isEmpty(sql)) return results;
+
+        try {
+            // Druid 会根据分号自动切分多条语句
+            List<SQLStatement> statements = SQLUtils.parseStatements(sql, dbType);
+
+            for (SQLStatement statement : statements) {
+                // 只处理建表语句，忽略其他的（如 INSERT, ALTER, SET 等）
+                if (statement instanceof SQLCreateTableStatement) {
+                    SQLCreateTableStatement createTableStmt = (SQLCreateTableStatement) statement;
+                    TableMeta tableMeta = new TableMeta();
+                    tableMeta.setDbType(dbType.name());
+                    tableMeta.setTableName(cleanName(createTableStmt.getTableName()));
+
+                    // 解析普通列
+                    for (SQLTableElement element : createTableStmt.getTableElementList()) {
+                        if (element instanceof SQLColumnDefinition) {
+                            tableMeta.getColumns().add(extractColumnInfo((SQLColumnDefinition) element));
+                        }
+                    }
+
+                    // 解析分区列
+                    List<SQLColumnDefinition> partitionColumns = createTableStmt.getPartitionColumns();
+                    if (partitionColumns != null) {
+                        for (SQLColumnDefinition partitionCol : partitionColumns) {
+                            tableMeta.getPartitionColumns().add(extractColumnInfo(partitionCol));
+                        }
+                    }
+
+                    results.add(tableMeta);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("批量解析失败 [" + dbType + "]: " + e.getMessage());
+        }
+        return results;
     }
 
     /**
